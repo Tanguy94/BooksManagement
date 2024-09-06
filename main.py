@@ -1,9 +1,10 @@
+from flask import Flask, request, jsonify, abort
 import sqlite3
-from fastapi import FastAPI, HTTPException, Header, Depends
-from pydantic import BaseModel
-from typing import List, Optional
  
-app = FastAPI()
+app = Flask(__name__)
+ 
+# Clé API statique pour l'exemple
+API_KEY = "123456789ABC"
  
 # Connexion à la base de données SQLite
 DATABASE = "library.db"
@@ -12,21 +13,6 @@ def get_db_connection():
     conn = sqlite3.connect(DATABASE)
     conn.row_factory = sqlite3.Row  # Pour avoir les résultats sous forme de dictionnaire
     return conn
- 
-# Clé API statique pour l'exemple
-API_KEY = '123456789ABC'
- 
-# Vérification de la clé API
-async def verify_api_key(x_api_key: str = Header(...)):
-    if x_api_key != API_KEY:
-        raise HTTPException(status_code=403, detail="Clé API invalide")
- 
-# Modèle pour les livres
-class BookCreate(BaseModel):
-    title: str
-    author: str
-    description: Optional[str] = None
-    year: int
  
 # Créer la table "books" dans SQLite si elle n'existe pas
 def create_table():
@@ -37,37 +23,59 @@ def create_table():
             title TEXT NOT NULL,
             author TEXT NOT NULL,
             description TEXT,
-            year INTEGER NOT NULL
+            year INTEGER NOT NULL,
+            quantity INTEGER NOT NULL  -- Ajout de la colonne quantity
         )
     ''')
     conn.commit()
     conn.close()
  
-create_table()  # Appel lors du démarrage pour s'assurer que la table existe
- 
-# Endpoint pour recevoir un body JSON avec les livres du groupe 1 (requiert la clé API)
-@app.post("/upload-books-json/", dependencies=[Depends(verify_api_key)])
-async def upload_books_json(books_data: List[BookCreate]):
-    # Connexion à la base de données
+# Vérification de la clé API
+def verify_api_key():
+    api_key = request.headers.get('x-api-key')
+    if api_key != API_KEY:
+        abort(403, description="Clé API invalide")
+        
+def add_book(title, author, description, year, quantity):
     conn = get_db_connection()
-    cursor = conn.cursor()
- 
-    # Parcourir chaque livre dans le body JSON et l'ajouter à la base de données
-    for book in books_data:
-        cursor.execute('''
-            INSERT INTO books (title, author, description, year)
-            VALUES (?, ?, ?, ?)
-        ''', (book.title, book.author, book.description, book.year))
- 
+    conn.execute('''
+        INSERT INTO books (title, author, description, year, quantity)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (title, author, description, year, quantity))
     conn.commit()
     conn.close()
+    print(f"Livre '{title}' ajouté avec succès !") 
  
-    return {"status": "Books added successfully", "total_books": len(books_data)}
  
-# Endpoint pour obtenir la liste de tous les livres (pas besoin de clé API)
-@app.get("/books", response_model=List[BookCreate])
+# Endpoint pour ajouter des livres à la base de données
+@app.route('/bookspost/', methods=['POST'])
+def bookspost():
+    verify_api_key()  # Vérifie la clé API
+ 
+    data = request.get_json()
+    title = data['title']
+    author = data['author']
+    description = data.get('description', '')
+    year = data['year']
+    quantity = data['quantity']
+ 
+    # Ajouter le livre dans la base de données
+    add_book(title, author, description, year, quantity)
+ 
+    return jsonify({"status": f"Livre '{title}' ajouté avec succès !"}),201
+ 
+ 
+
+# Endpoint pour obtenir la liste de tous les livres
+@app.route('/books', methods=['GET'])
 def get_books():
     conn = get_db_connection()
     books = conn.execute('SELECT * FROM books').fetchall()
     conn.close()
-    return [dict(book) for book in books]
+ 
+    books_list = [dict(book) for book in books]
+    return jsonify(books_list)
+ 
+# Démarrer l'application Flask
+if __name__ == '__main__':
+    app.run(debug=True)
