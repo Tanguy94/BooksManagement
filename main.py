@@ -1,7 +1,14 @@
 from flask import Flask, request, jsonify, abort
 import sqlite3
  
+from flask import Flask
+ 
 app = Flask(__name__)
+ 
+@app.route('/')
+def hello():
+    return 'Hello, Flask!'
+
  
 # Clé API statique pour l'exemple
 API_KEY = "123456789ABC"
@@ -35,36 +42,6 @@ def verify_api_key():
     api_key = request.headers.get('x-api-key')
     if api_key != API_KEY:
         abort(403, description="Clé API invalide")
-        
-def add_book(title, author, description, year, quantity):
-    conn = get_db_connection()
-    conn.execute('''
-        INSERT INTO books (title, author, description, year, quantity)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (title, author, description, year, quantity))
-    conn.commit()
-    conn.close()
-    print(f"Livre '{title}' ajouté avec succès !") 
- 
- 
-# Endpoint pour ajouter des livres à la base de données
-@app.route('/bookspost/', methods=['POST'])
-def bookspost():
-    verify_api_key()  # Vérifie la clé API
- 
-    data = request.get_json()
-    title = data['title']
-    author = data['author']
-    description = data.get('description', '')
-    year = data['year']
-    quantity = data['quantity']
- 
-    # Ajouter le livre dans la base de données
-    add_book(title, author, description, year, quantity)
- 
-    return jsonify({"status": f"Livre '{title}' ajouté avec succès !"}),201
- 
- 
 
 # Endpoint pour obtenir la liste de tous les livres
 @app.route('/books', methods=['GET'])
